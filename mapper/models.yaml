@@ -9,13 +9,13 @@ tiers:
     cost_per_million_output_tokens: 0.0
 
   moyen:
-    model: "meta-llama/llama-3.3-70b-versatile"
+    model: "llama-3.3-70b-versatile"
     description: "Code, résumé, calcul"
     cost_per_million_input_tokens: 0.0
     cost_per_million_output_tokens: 0.0
 
   petit:
-    model: "meta-llama/llama-3.1-8b-instant"
+    model: "llama-3.1-8b-instant"
     description: "Traduction, reformatage, extraction simple"
     cost_per_million_input_tokens: 0.0
     cost_per_million_output_tokens: 0.0

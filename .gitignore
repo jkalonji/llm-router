@@ -21,3 +21,10 @@ logs/*.jsonl
 .vscode/
 .idea/
 *.swp
+
+# Claude Code
+.claude/
+
+# Fichiers locaux divers
+env.txt
+*.docx
