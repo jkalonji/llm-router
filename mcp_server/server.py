@@ -27,20 +27,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from mcp.server import Server
-from mcp.server.stdio import stdio_server
-from mcp.server.sse import SseServerTransport
-from mcp import types
-from starlette.applications import Starlette
-from starlette.requests import Request
-from starlette.responses import Response
-from starlette.routing import Mount, Route
+from mcp.server.fastmcp import FastMCP
 
 from router import Router
 from logger import RouterLogger
 
 
-app = Server("llm-router")
+mcp = FastMCP("llm-router")
 _router: Router | None = None
 _logger: RouterLogger | None = None
 
@@ -59,112 +52,49 @@ def get_logger() -> RouterLogger:
     return _logger
 
 
-@app.list_tools()
-async def list_tools() -> list[types.Tool]:
-    return [
-        types.Tool(
-            name="route_prompt",
-            description=(
-                "Analyse un prompt utilisateur et retourne un plan de routage : "
-                "décompose en sous-tâches atomiques, identifie la catégorie et le modèle optimal "
-                "pour chacune. Mode recommandation uniquement — n'exécute pas le prompt."
-            ),
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "prompt": {
-                        "type": "string",
-                        "description": "Le prompt utilisateur à router.",
-                    }
-                },
-                "required": ["prompt"],
-            },
-        ),
-        types.Tool(
-            name="execute_prompt",
-            description=(
-                "Analyse un prompt utilisateur, le décompose en sous-tâches, "
-                "et exécute chaque sous-tâche sur le modèle Groq optimal. "
-                "Retourne les réponses de chaque sous-tâche. Mode agent uniquement."
-            ),
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "prompt": {
-                        "type": "string",
-                        "description": "Le prompt utilisateur à router et exécuter.",
-                    }
-                },
-                "required": ["prompt"],
-            },
-        ),
-        types.Tool(
-            name="get_log_summary",
-            description=(
-                "Retourne un résumé agrégé des appels LLM : tokens consommés par tier, "
-                "coûts estimés, distribution des appels. Utile pour valider les hypothèses du POC."
-            ),
-            inputSchema={
-                "type": "object",
-                "properties": {},
-                "required": [],
-            },
-        ),
-    ]
-
-
-@app.call_tool()
-async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
-    import asyncio
+@mcp.tool()
+def route_prompt(prompt: str) -> str:
+    """
+    Analyse un prompt utilisateur et retourne un plan de routage JSON.
+    Décompose en sous-tâches atomiques, identifie la catégorie et le modèle optimal pour chacune.
+    Mode recommandation uniquement — n'exécute pas le prompt.
+    """
+    if not prompt.strip():
+        return json.dumps({"error": "Le champ prompt est vide."})
     try:
-        router = get_router()
-        logger = get_logger()
-
-        if name == "route_prompt":
-            prompt = arguments.get("prompt", "").strip()
-            if not prompt:
-                return [types.TextContent(type="text", text='{"error": "Le champ prompt est vide."}')]
-            result = await asyncio.to_thread(router.route, prompt, "recommendation")
-            return [types.TextContent(type="text", text=json.dumps(result.to_dict(), ensure_ascii=False, indent=2))]
-
-        elif name == "execute_prompt":
-            prompt = arguments.get("prompt", "").strip()
-            if not prompt:
-                return [types.TextContent(type="text", text='{"error": "Le champ prompt est vide."}')]
-            result = await asyncio.to_thread(router.route, prompt, "execution")
-            return [types.TextContent(type="text", text=json.dumps(result.to_dict(), ensure_ascii=False, indent=2))]
-
-        elif name == "get_log_summary":
-            summary = await asyncio.to_thread(logger.summarize)
-            return [types.TextContent(type="text", text=json.dumps(summary, ensure_ascii=False, indent=2))]
-
-        else:
-            return [types.TextContent(type="text", text=f'{{"error": "Outil inconnu : {name}"}}')]
-
+        result = get_router().route(prompt, mode="recommendation")
+        return json.dumps(result.to_dict(), ensure_ascii=False, indent=2)
     except Exception as e:
-        error_payload = json.dumps({"error": str(e), "type": type(e).__name__}, ensure_ascii=False)
-        return [types.TextContent(type="text", text=error_payload)]
+        return json.dumps({"error": str(e), "type": type(e).__name__}, ensure_ascii=False)
 
 
-def build_sse_app(host: str, port: int) -> Starlette:
-    sse = SseServerTransport("/messages/")
+@mcp.tool()
+def execute_prompt(prompt: str) -> str:
+    """
+    Analyse un prompt utilisateur, le décompose en sous-tâches,
+    et exécute chaque sous-tâche sur le modèle Groq optimal.
+    Retourne les réponses complètes de chaque sous-tâche. Mode agent uniquement.
+    """
+    if not prompt.strip():
+        return json.dumps({"error": "Le champ prompt est vide."})
+    try:
+        result = get_router().route(prompt, mode="execution")
+        return json.dumps(result.to_dict(), ensure_ascii=False, indent=2)
+    except Exception as e:
+        return json.dumps({"error": str(e), "type": type(e).__name__}, ensure_ascii=False)
 
-    async def handle_sse(request: Request) -> Response:
-        async with sse.connect_sse(
-            request.scope, request.receive, request._send
-        ) as streams:
-            await app.run(streams[0], streams[1], app.create_initialization_options())
-        return Response()
 
-    return Starlette(routes=[
-        Route("/sse", endpoint=handle_sse, methods=["GET"]),
-        Mount("/messages/", app=sse.handle_post_message),
-    ])
-
-
-async def run_stdio():
-    async with stdio_server() as (read_stream, write_stream):
-        await app.run(read_stream, write_stream, app.create_initialization_options())
+@mcp.tool()
+def get_log_summary() -> str:
+    """
+    Retourne un résumé agrégé des appels LLM : tokens consommés par tier,
+    coûts estimés, distribution des appels.
+    """
+    try:
+        summary = get_logger().summarize()
+        return json.dumps(summary, ensure_ascii=False, indent=2)
+    except Exception as e:
+        return json.dumps({"error": str(e), "type": type(e).__name__}, ensure_ascii=False)
 
 
 def parse_args() -> argparse.Namespace:
@@ -181,14 +111,12 @@ def parse_args() -> argparse.Namespace:
 
 
 if __name__ == "__main__":
-    import asyncio
-    import uvicorn
-
     args = parse_args()
 
     if args.transport == "sse":
+        import uvicorn
         print(f"LLM Router MCP — transport SSE sur http://{args.host}:{args.port}/sse", flush=True)
-        starlette_app = build_sse_app(args.host, args.port)
-        uvicorn.run(starlette_app, host=args.host, port=args.port)
+        uvicorn.run(mcp.sse_app(), host=args.host, port=args.port)
     else:
-        asyncio.run(run_stdio())
+        import asyncio
+        asyncio.run(mcp.run_stdio_async())
