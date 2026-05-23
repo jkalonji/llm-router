@@ -1,0 +1,23 @@
+# Environnement
+.env
+*.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+
+# Logs (données sensibles — tokens, coûts)
+logs/*.jsonl
+
+# IDE
+.vscode/
+.idea/
+*.swp

@@ -1,0 +1,48 @@
+# LLM Router — Matrice de mapping catégorie → tier → modèle
+# Modifiable sans toucher au code
+
+tiers:
+  gros:
+    model: "openai/gpt-oss-120b"
+    description: "Raisonnement complexe, analyse stratégique"
+    cost_per_million_input_tokens: 0.0    # free tier Groq
+    cost_per_million_output_tokens: 0.0
+
+  moyen:
+    model: "meta-llama/llama-3.3-70b-versatile"
+    description: "Code, résumé, calcul"
+    cost_per_million_input_tokens: 0.0
+    cost_per_million_output_tokens: 0.0
+
+  petit:
+    model: "meta-llama/llama-3.1-8b-instant"
+    description: "Traduction, reformatage, extraction simple"
+    cost_per_million_input_tokens: 0.0
+    cost_per_million_output_tokens: 0.0
+
+categories:
+  reflexion:
+    tier: gros
+    keywords_hint: ["analyse", "stratégie", "raisonnement", "réfléchis", "explique en profondeur", "dissertation", "argue", "evaluate", "analyze", "think through"]
+
+  code:
+    tier: moyen
+    keywords_hint: ["code", "programme", "fonction", "debug", "implémente", "algorithm", "script", "refactor"]
+
+  resume:
+    tier: moyen
+    keywords_hint: ["résume", "synthétise", "points clés", "summarize", "tldr", "extract key", "condense"]
+
+  traduction:
+    tier: petit
+    keywords_hint: ["traduis", "translate", "übersetz", "traduce", "reformule dans une autre langue"]
+
+  execution:
+    tier: petit
+    keywords_hint: ["reformate", "extrait", "remplis", "formate", "convert", "liste", "parse", "extract", "fill in", "reformat"]
+
+classifier:
+  model: "openai/gpt-oss-120b"
+  fallback_model: null   # null = erreur explicite si modèle indisponible (pas de fallback silencieux)
+  max_tokens: 1024
+  temperature: 0.0       # déterministe pour le routage
