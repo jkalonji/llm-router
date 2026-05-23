@@ -1,25 +1,40 @@
 """
 mcp_server/server.py
 Expose le LLM Router via le protocole MCP (Model Context Protocol).
-Compatible Claude Desktop, Cursor, et tout agent MCP-ready.
+
+Deux transports :
+- stdio (défaut) : pour Claude Code en local — lancé en sous-processus
+- sse            : pour agents distants — écoute sur HTTP/SSE
 
 Outils exposés :
 - route_prompt      : classifie + recommande (mode chatbot/LLM)
 - execute_prompt    : classifie + exécute sur le bon modèle (mode agent)
 - get_log_summary   : retourne un résumé agrégé des tokens et coûts
+
+Usage :
+    # Local (Claude Code)
+    uv run --env-file .env python mcp_server/server.py
+
+    # Distant (agent externe)
+    uv run --env-file .env python mcp_server/server.py --transport sse --host 0.0.0.0 --port 8000
 """
 
+import argparse
 import json
 import sys
 import os
 from pathlib import Path
 
-# Ajouter le répertoire racine au path pour les imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
+from mcp.server.sse import SseServerTransport
 from mcp import types
+from starlette.applications import Starlette
+from starlette.requests import Request
+from starlette.responses import Response
+from starlette.routing import Mount, Route
 
 from router import Router
 from logger import RouterLogger
@@ -125,11 +140,49 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
         return [types.TextContent(type="text", text=f'{{"error": "Outil inconnu : {name}"}}')]
 
 
-async def main():
+def build_sse_app(host: str, port: int) -> Starlette:
+    sse = SseServerTransport("/messages/")
+
+    async def handle_sse(request: Request) -> Response:
+        async with sse.connect_sse(
+            request.scope, request.receive, request._send
+        ) as streams:
+            await app.run(streams[0], streams[1], app.create_initialization_options())
+        return Response()
+
+    return Starlette(routes=[
+        Route("/sse", endpoint=handle_sse, methods=["GET"]),
+        Mount("/messages/", app=sse.handle_post_message),
+    ])
+
+
+async def run_stdio():
     async with stdio_server() as (read_stream, write_stream):
         await app.run(read_stream, write_stream, app.create_initialization_options())
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="LLM Router MCP Server")
+    parser.add_argument(
+        "--transport",
+        choices=["stdio", "sse"],
+        default="stdio",
+        help="Transport à utiliser (défaut : stdio)",
+    )
+    parser.add_argument("--host", default="0.0.0.0", help="Hôte d'écoute en mode SSE (défaut : 0.0.0.0)")
+    parser.add_argument("--port", type=int, default=8000, help="Port d'écoute en mode SSE (défaut : 8000)")
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
     import asyncio
-    asyncio.run(main())
+    import uvicorn
+
+    args = parse_args()
+
+    if args.transport == "sse":
+        print(f"LLM Router MCP — transport SSE sur http://{args.host}:{args.port}/sse", flush=True)
+        starlette_app = build_sse_app(args.host, args.port)
+        uvicorn.run(starlette_app, host=args.host, port=args.port)
+    else:
+        asyncio.run(run_stdio())

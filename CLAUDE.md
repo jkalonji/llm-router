@@ -40,12 +40,46 @@ uv run --env-file .env python tests/test_prompts.py
 
 Résultat attendu : `Tests : 12 | Réussis : 12 | Écarts : 0 | Erreurs : 0`
 
-## Connexion MCP depuis Claude Code
+## Connexion MCP
+
+### Depuis Claude Code sur la même machine (stdio)
 
 Le fichier `.mcp.json` à la racine configure automatiquement le serveur MCP.
 **Aucune commande à lancer manuellement** — Claude Code démarre le serveur à la demande.
 
-Outils disponibles après connexion :
+### Depuis un agent sur une autre machine (SSE)
+
+**1. Démarrer le serveur en mode SSE sur la machine hôte :**
+
+```bash
+uv run --env-file .env python mcp_server/server.py --transport sse --host 0.0.0.0 --port 8000
+```
+
+Le serveur écoute sur `http://0.0.0.0:8000/sse`. Tu peux changer le port avec `--port`.
+
+**2. Connecter l'agent distant :**
+
+Dans Claude Code (machine distante), ajouter le serveur via la commande :
+
+```bash
+claude mcp add --transport sse llm-router http://<IP_HOTE>:8000/sse
+```
+
+Ou dans le fichier `~/.claude/mcp.json` (ou `.mcp.json` du projet) :
+
+```json
+{
+  "mcpServers": {
+    "llm-router": {
+      "url": "http://<IP_HOTE>:8000/sse"
+    }
+  }
+}
+```
+
+Remplace `<IP_HOTE>` par l'IP ou le hostname de la machine qui fait tourner le serveur.
+
+### Outils disponibles après connexion
 
 | Outil | Usage |
 |---|---|
@@ -72,8 +106,11 @@ Outils disponibles après connexion :
 # Tests
 uv run --env-file .env python tests/test_prompts.py
 
-# Serveur MCP en standalone (diagnostic)
+# Serveur MCP local (stdio — diagnostic)
 uv run --env-file .env python mcp_server/server.py
+
+# Serveur MCP distant (SSE)
+uv run --env-file .env python mcp_server/server.py --transport sse --port 8000
 
 # Appel direct au router en Python
 uv run --env-file .env python -c "
