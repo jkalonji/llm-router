@@ -101,7 +101,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="LLM Router MCP Server")
     parser.add_argument(
         "--transport",
-        choices=["stdio", "sse"],
+        choices=["stdio", "http", "sse"],
         default="stdio",
         help="Transport à utiliser (défaut : stdio)",
     )
@@ -113,9 +113,13 @@ def parse_args() -> argparse.Namespace:
 if __name__ == "__main__":
     args = parse_args()
 
-    if args.transport == "sse":
+    if args.transport == "http":
         import uvicorn
-        print(f"LLM Router MCP — transport SSE sur http://{args.host}:{args.port}/sse", flush=True)
+        print(f"LLM Router MCP — transport HTTP sur http://{args.host}:{args.port}/mcp", flush=True)
+        uvicorn.run(mcp.streamable_http_app(), host=args.host, port=args.port)
+    elif args.transport == "sse":
+        import uvicorn
+        print(f"LLM Router MCP — transport SSE (legacy) sur http://{args.host}:{args.port}/sse", flush=True)
         uvicorn.run(mcp.sse_app(), host=args.host, port=args.port)
     else:
         import asyncio
