@@ -115,29 +115,35 @@ async def list_tools() -> list[types.Tool]:
 
 @app.call_tool()
 async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
-    router = get_router()
-    logger = get_logger()
+    import asyncio
+    try:
+        router = get_router()
+        logger = get_logger()
 
-    if name == "route_prompt":
-        prompt = arguments.get("prompt", "").strip()
-        if not prompt:
-            return [types.TextContent(type="text", text='{"error": "Le champ prompt est vide."}')]
-        result = router.route(prompt, mode="recommendation")
-        return [types.TextContent(type="text", text=json.dumps(result.to_dict(), ensure_ascii=False, indent=2))]
+        if name == "route_prompt":
+            prompt = arguments.get("prompt", "").strip()
+            if not prompt:
+                return [types.TextContent(type="text", text='{"error": "Le champ prompt est vide."}')]
+            result = await asyncio.to_thread(router.route, prompt, "recommendation")
+            return [types.TextContent(type="text", text=json.dumps(result.to_dict(), ensure_ascii=False, indent=2))]
 
-    elif name == "execute_prompt":
-        prompt = arguments.get("prompt", "").strip()
-        if not prompt:
-            return [types.TextContent(type="text", text='{"error": "Le champ prompt est vide."}')]
-        result = router.route(prompt, mode="execution")
-        return [types.TextContent(type="text", text=json.dumps(result.to_dict(), ensure_ascii=False, indent=2))]
+        elif name == "execute_prompt":
+            prompt = arguments.get("prompt", "").strip()
+            if not prompt:
+                return [types.TextContent(type="text", text='{"error": "Le champ prompt est vide."}')]
+            result = await asyncio.to_thread(router.route, prompt, "execution")
+            return [types.TextContent(type="text", text=json.dumps(result.to_dict(), ensure_ascii=False, indent=2))]
 
-    elif name == "get_log_summary":
-        summary = logger.summarize()
-        return [types.TextContent(type="text", text=json.dumps(summary, ensure_ascii=False, indent=2))]
+        elif name == "get_log_summary":
+            summary = await asyncio.to_thread(logger.summarize)
+            return [types.TextContent(type="text", text=json.dumps(summary, ensure_ascii=False, indent=2))]
 
-    else:
-        return [types.TextContent(type="text", text=f'{{"error": "Outil inconnu : {name}"}}')]
+        else:
+            return [types.TextContent(type="text", text=f'{{"error": "Outil inconnu : {name}"}}')]
+
+    except Exception as e:
+        error_payload = json.dumps({"error": str(e), "type": type(e).__name__}, ensure_ascii=False)
+        return [types.TextContent(type="text", text=error_payload)]
 
 
 def build_sse_app(host: str, port: int) -> Starlette:
