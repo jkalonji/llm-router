@@ -29,8 +29,20 @@ llm_router/
 
 ## Installation
 
+Installez [uv](https://docs.astral.sh/uv/) si ce n'est pas déjà fait :
+
 ```bash
-pip install -r requirements.txt
+# macOS / Linux
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Windows (PowerShell)
+irm https://astral.sh/uv/install.ps1 | iex
+```
+
+Puis installez les dépendances :
+
+```bash
+uv sync
 ```
 
 ---
@@ -41,6 +53,7 @@ Créez un fichier `.env` à la racine du projet (ne le committez jamais) :
 
 ```
 GROQ_API_KEY=gsk_xxxxxxxxxxxxxxxxxxxx
+PYTHONUTF8=1
 ```
 
 Obtenez une clé gratuite sur [https://console.groq.com](https://console.groq.com) — sans carte bancaire.
@@ -50,7 +63,7 @@ Obtenez une clé gratuite sur [https://console.groq.com](https://console.groq.co
 ## Lancer les tests
 
 ```bash
-python tests/test_prompts.py
+uv run --env-file .env python tests/test_prompts.py
 ```
 
 Le fichier de test couvre :
@@ -91,43 +104,49 @@ Prompt utilisateur
 | Catégorie   | Tier  | Modèle Groq                          |
 |-------------|-------|--------------------------------------|
 | reflexion   | gros  | openai/gpt-oss-120b                  |
-| code        | moyen | meta-llama/llama-3.3-70b-versatile   |
-| resume      | moyen | meta-llama/llama-3.3-70b-versatile   |
-| traduction  | petit | meta-llama/llama-3.1-8b-instant      |
-| execution   | petit | meta-llama/llama-3.1-8b-instant      |
+| code        | moyen | llama-3.3-70b-versatile              |
+| resume      | moyen | llama-3.3-70b-versatile              |
+| traduction  | petit | llama-3.1-8b-instant                 |
+| execution   | petit | llama-3.1-8b-instant                 |
 
 La matrice est configurable via `mapper/models.yaml`.
 
 ---
 
-## Intégration MCP (Claude Desktop, Cursor)
+## Intégration MCP
 
-Lancez le serveur MCP :
+### Claude Code (recommandé)
 
-```bash
-python mcp_server/server.py
-```
+Le repo inclut un fichier `.mcp.json` prêt à l'emploi. Ouvrez le projet dans Claude Code — les outils MCP sont disponibles automatiquement pour vous et pour tout agent que vous créez avec `/agent`.
 
-Configurez votre agent MCP avec :
+Prérequis : avoir créé votre `.env` avec `GROQ_API_KEY` (voir section Configuration).
+
+### Autres agents MCP (Claude Desktop, Cursor…)
+
+Ajoutez cette entrée dans votre fichier de configuration MCP :
 
 ```json
 {
   "mcpServers": {
     "llm-router": {
-      "command": "python",
-      "args": ["<chemin_absolu>/mcp_server/server.py"],
-      "env": {
-        "GROQ_API_KEY": "gsk_xxxxxxxxxxxxxxxxxxxx"
-      }
+      "command": "uv",
+      "args": ["run", "--env-file", ".env", "python", "mcp_server/server.py"],
+      "cwd": "/chemin/vers/llm-router"
     }
   }
 }
 ```
 
-Outils exposés :
-- **`route_prompt`** — recommandation uniquement (mode chatbot/LLM)
-- **`execute_prompt`** — classification + exécution (mode agent)
-- **`get_log_summary`** — résumé agrégé des tokens et coûts
+- Claude Desktop : `%APPDATA%\Claude\claude_desktop_config.json` (Windows) ou `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS)
+- Cursor : `.cursor/mcp.json` à la racine du projet
+
+### Outils exposés
+
+| Outil | Mode | Description |
+|---|---|---|
+| `route_prompt` | recommendation | Classifie et retourne le plan JSON — n'exécute pas le prompt |
+| `execute_prompt` | execution | Classifie et exécute chaque sous-tâche sur le bon modèle Groq |
+| `get_log_summary` | monitoring | Résumé agrégé des tokens et coûts |
 
 ---
 
