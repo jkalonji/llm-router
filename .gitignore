@@ -28,3 +28,11 @@ logs/*.jsonl
 # Fichiers locaux divers
 env.txt
 *.docx
+
+# Fichiers de diagnostic MCP (générés en local)
+mcp_check.txt
+mcp_stderr.txt
+mcp_stdout.txt
+sse_err.txt
+sse_out.txt
+stdio_err.txt

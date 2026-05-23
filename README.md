@@ -115,15 +115,87 @@ La matrice est configurable via `mapper/models.yaml`.
 
 ## Intégration MCP
 
-### Claude Code (recommandé)
+Le serveur MCP expose trois outils permettant à n'importe quel agent compatible (Claude Code, Claude Desktop, Cursor, etc.) de router ses prompts via LLM Router sans modifier son code.
 
-Le repo inclut un fichier `.mcp.json` prêt à l'emploi. Ouvrez le projet dans Claude Code — les outils MCP sont disponibles automatiquement pour vous et pour tout agent que vous créez avec `/agent`.
+### Connexion rapide — Claude Code (même machine, mode stdio)
 
-Prérequis : avoir créé votre `.env` avec `GROQ_API_KEY` (voir section Configuration).
+C'est le mode recommandé si vous clonez le repo localement.
 
-### Autres agents MCP (Claude Desktop, Cursor…)
+**1. Clonez le repo et installez les dépendances :**
 
-Ajoutez cette entrée dans votre fichier de configuration MCP :
+```bash
+git clone https://github.com/jkalonji/LLM-router.git
+cd LLM-router
+uv sync
+```
+
+**2. Créez votre fichier `.env` à la racine :**
+
+```
+GROQ_API_KEY=gsk_xxxxxxxxxxxxxxxxxxxx
+PYTHONUTF8=1
+```
+
+Clé gratuite (sans carte) : [https://console.groq.com](https://console.groq.com)
+
+**3. Ouvrez le dossier dans Claude Code :**
+
+```bash
+claude .
+```
+
+Le fichier `.mcp.json` inclus dans le repo configure le serveur automatiquement — aucune commande à lancer manuellement. Les outils `route_prompt`, `execute_prompt` et `get_log_summary` sont immédiatement disponibles dans Claude Code.
+
+**Vérification :**
+
+```bash
+# Dans Claude Code, tapez :
+/mcp
+# Vous devez voir : llm-router  connected
+```
+
+---
+
+### Connexion depuis une autre machine (mode SSE)
+
+Utilisez ce mode si votre agent tourne sur une machine différente de celle qui héberge LLM Router.
+
+**Sur la machine hôte (celle qui fait tourner LLM Router) :**
+
+```bash
+uv run --env-file .env python mcp_server/server.py --transport sse --host 0.0.0.0 --port 8000
+```
+
+Le serveur écoute sur `http://0.0.0.0:8000/sse`. Vérifiez que le port 8000 est ouvert dans votre pare-feu.
+
+**Sur la machine cliente (votre agent) :**
+
+```bash
+claude mcp add --transport sse llm-router http://<IP_HOTE>:8000/sse
+```
+
+Ou ajoutez manuellement dans `~/.claude/mcp.json` (global) ou `.mcp.json` (projet) :
+
+```json
+{
+  "mcpServers": {
+    "llm-router": {
+      "url": "http://<IP_HOTE>:8000/sse"
+    }
+  }
+}
+```
+
+Remplacez `<IP_HOTE>` par l'adresse IP ou le hostname de la machine hôte.
+
+---
+
+### Connexion depuis Claude Desktop ou Cursor
+
+**Claude Desktop** — éditez le fichier de config :
+
+- Windows : `%APPDATA%\Claude\claude_desktop_config.json`
+- macOS : `~/Library/Application Support/Claude/claude_desktop_config.json`
 
 ```json
 {
@@ -131,22 +203,33 @@ Ajoutez cette entrée dans votre fichier de configuration MCP :
     "llm-router": {
       "command": "uv",
       "args": ["run", "--env-file", ".env", "python", "mcp_server/server.py"],
-      "cwd": "/chemin/vers/llm-router"
+      "cwd": "/chemin/absolu/vers/LLM-router"
     }
   }
 }
 ```
 
-- Claude Desktop : `%APPDATA%\Claude\claude_desktop_config.json` (Windows) ou `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS)
-- Cursor : `.cursor/mcp.json` à la racine du projet
+**Cursor** — créez `.cursor/mcp.json` à la racine de votre projet avec le même contenu.
+
+> Remplacez `cwd` par le chemin absolu vers le dossier cloné.
+
+---
 
 ### Outils exposés
 
 | Outil | Mode | Description |
 |---|---|---|
-| `route_prompt` | recommendation | Classifie et retourne le plan JSON — n'exécute pas le prompt |
-| `execute_prompt` | execution | Classifie et exécute chaque sous-tâche sur le bon modèle Groq |
-| `get_log_summary` | monitoring | Résumé agrégé des tokens et coûts |
+| `route_prompt` | recommendation | Classifie le prompt et retourne le plan de routage JSON — n'exécute pas |
+| `execute_prompt` | execution | Classifie et exécute chaque sous-tâche sur le modèle Groq optimal, retourne les réponses |
+| `get_log_summary` | monitoring | Résumé agrégé des tokens consommés et des coûts estimés |
+
+**Exemple d'utilisation dans Claude Code après connexion :**
+
+```
+Utilisez execute_prompt avec le prompt : "Résume ce texte et traduis-le en anglais : ..."
+```
+
+Le routeur décompose automatiquement la tâche (résumé → llama-3.3-70b, traduction → llama-3.1-8b) et retourne les deux réponses.
 
 ---
 
